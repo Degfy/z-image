@@ -17,6 +17,7 @@
         button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; }
         button:hover { background: #0056b3; }
         button:disabled { background: #ccc; cursor: not-allowed; }
+        .preset-btn { background: #e9ecef; color: #333; border: 1px solid #ddd; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
         .result { margin-top: 20px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
         .status { padding: 10px; border-radius: 6px; margin-bottom: 15px; text-align: center; }
         .status.pending { background: #fff3cd; }
@@ -49,27 +50,22 @@
         <div class="row">
             <div class="form-group">
                 <label for="height">Height (max 2048)</label>
-                <input type="text" id="height" value="1024" list="height-presets" placeholder="e.g. 1024 or 2048" required>
-                <datalist id="height-presets">
-                    <option value="512">
-                    <option value="768">
-                    <option value="1024">
-                    <option value="1280">
-                    <option value="1536">
-                    <option value="2048">
-                </datalist>
+                <input type="number" id="height" value="1024" min="64" max="2048" step="64" required>
             </div>
             <div class="form-group">
                 <label for="width">Width (max 2048)</label>
-                <input type="text" id="width" value="1024" list="width-presets" placeholder="e.g. 1024 or 2048" required>
-                <datalist id="width-presets">
-                    <option value="512">
-                    <option value="768">
-                    <option value="1024">
-                    <option value="1280">
-                    <option value="1536">
-                    <option value="2048">
-                </datalist>
+                <input type="number" id="width" value="1024" min="64" max="2048" step="64" required>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Quick Presets</label>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="preset-btn" onclick="setSize(512, 512)">512×512</button>
+                <button type="button" class="preset-btn" onclick="setSize(768, 768)">768×768</button>
+                <button type="button" class="preset-btn" onclick="setSize(1024, 1024)">1024×1024</button>
+                <button type="button" class="preset-btn" onclick="setSize(1280, 720)">1280×720</button>
+                <button type="button" class="preset-btn" onclick="setSize(1920, 1080)">1920×1080</button>
+                <button type="button" class="preset-btn" onclick="setSize(2048, 2048)">2048×2048</button>
             </div>
         </div>
         <div class="row">
@@ -120,6 +116,11 @@
             } catch (e) {
                 alert('Unload failed: ' + e.message);
             }
+        }
+
+        function setSize(w, h) {
+            document.getElementById('width').value = w;
+            document.getElementById('height').value = h;
         }
 
         async function pollStatus(taskId) {
