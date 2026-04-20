@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import sys
 import subprocess
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -68,10 +69,23 @@ def get_image(task_id: str):
 
 @app.post("/unload")
 def unload():
-    service.unload_model()
-    python = sys.executable
-    subprocess.Popen([python] + sys.argv)
-    return {"status": "ok", "message": "Service restarting..."}
+    qsize, model_loaded = service.get_queue_status()
+    if qsize > 0:
+        raise HTTPException(status_code=409, detail=f"Queue has {qsize} pending tasks")
+    if model_loaded and service.running:
+        tasks_running = any(t.status == "running" for t in service.tasks.values())
+        if tasks_running:
+            raise HTTPException(status_code=409, detail="Worker is busy, cannot unload model")
+    unloaded = service.unload_model()
+    if unloaded is None:
+        unloaded = True
+    if unloaded:
+        def _restart():
+            import time
+            time.sleep(0.5)
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        threading.Thread(target=_restart, daemon=True).start()
+    return {"unloaded": unloaded}
 
 
 @app.get("/health", response_model=HealthResponse)
