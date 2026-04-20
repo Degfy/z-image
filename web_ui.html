@@ -38,6 +38,7 @@
         <span>Queue: <strong id="queue-size">-</strong></span>
         <span>Model: <strong id="model-status">-</strong></span>
         <button onclick="checkHealth()" style="width: auto; padding: 5px 15px; font-size: 12px;">Refresh</button>
+        <button onclick="unloadModel()" style="width: auto; padding: 5px 15px; font-size: 12px;">Unload Model</button>
     </div>
 
     <form id="generate-form">
@@ -47,22 +48,28 @@
         </div>
         <div class="row">
             <div class="form-group">
-                <label for="height">Height</label>
-                <select id="height">
-                    <option value="256">256</option>
-                    <option value="512">512</option>
-                    <option value="768">768</option>
-                    <option value="1024" selected>1024</option>
-                </select>
+                <label for="height">Height (max 2048)</label>
+                <input type="text" id="height" value="1024" list="height-presets" placeholder="e.g. 1024 or 2048" required>
+                <datalist id="height-presets">
+                    <option value="512">
+                    <option value="768">
+                    <option value="1024">
+                    <option value="1280">
+                    <option value="1536">
+                    <option value="2048">
+                </datalist>
             </div>
             <div class="form-group">
-                <label for="width">Width</label>
-                <select id="width">
-                    <option value="256">256</option>
-                    <option value="512">512</option>
-                    <option value="768">768</option>
-                    <option value="1024" selected>1024</option>
-                </select>
+                <label for="width">Width (max 2048)</label>
+                <input type="text" id="width" value="1024" list="width-presets" placeholder="e.g. 1024 or 2048" required>
+                <datalist id="width-presets">
+                    <option value="512">
+                    <option value="768">
+                    <option value="1024">
+                    <option value="1280">
+                    <option value="1536">
+                    <option value="2048">
+                </datalist>
             </div>
         </div>
         <div class="row">
@@ -101,6 +108,17 @@
                 document.getElementById('model-status').textContent = data.model_loaded ? 'Loaded' : 'Not Loaded';
             } catch (e) {
                 console.error('Health check failed:', e);
+            }
+        }
+
+        async function unloadModel() {
+            if (!confirm('Unload the model and restart the service?')) return;
+            try {
+                const res = await fetch('/unload', { method: 'POST' });
+                const data = await res.json();
+                alert(data.message || 'Service is restarting...');
+            } catch (e) {
+                alert('Unload failed: ' + e.message);
             }
         }
 
@@ -176,7 +194,7 @@
         };
 
         checkHealth();
-        setInterval(checkHealth, 10000);
+        setInterval(checkHealth, 60000);
     </script>
 </body>
 </html>
