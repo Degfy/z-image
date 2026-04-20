@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Generation Test</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        h1 { text-align: center; margin-bottom: 20px; color: #333; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 500; color: #555; }
+        input, textarea, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+        textarea { height: 80px; resize: vertical; }
+        .row { display: flex; gap: 15px; }
+        .row > div { flex: 1; }
+        button { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; width: 100%; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .result { margin-top: 20px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .status { padding: 10px; border-radius: 6px; margin-bottom: 15px; text-align: center; }
+        .status.pending { background: #fff3cd; }
+        .status.running { background: #cce5ff; }
+        .status.completed { background: #d4edda; }
+        .status.failed { background: #f8d7da; }
+        #image-container { margin-top: 15px; text-align: center; }
+        #image-container img { max-width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+        .error { color: #dc3545; margin-top: 10px; }
+        .health { text-align: center; margin-bottom: 20px; padding: 10px; background: white; border-radius: 6px; font-size: 14px; }
+        .health span { margin: 0 10px; }
+        .queue-full { color: #dc3545; text-align: center; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Image Generation Test</h1>
+
+    <div class="health">
+        <span>Queue: <strong id="queue-size">-</strong></span>
+        <span>Model: <strong id="model-status">-</strong></span>
+        <button onclick="checkHealth()" style="width: auto; padding: 5px 15px; font-size: 12px;">Refresh</button>
+    </div>
+
+    <form id="generate-form">
+        <div class="form-group">
+            <label for="prompt">Prompt</label>
+            <textarea id="prompt" placeholder="Enter image description..." required>A cute dog playing in the park</textarea>
+        </div>
+        <div class="row">
+            <div class="form-group">
+                <label for="height">Height</label>
+                <select id="height">
+                    <option value="256">256</option>
+                    <option value="512">512</option>
+                    <option value="768">768</option>
+                    <option value="1024" selected>1024</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="width">Width</label>
+                <select id="width">
+                    <option value="256">256</option>
+                    <option value="512">512</option>
+                    <option value="768">768</option>
+                    <option value="1024" selected>1024</option>
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div class="form-group">
+                <label for="steps">Inference Steps</label>
+                <select id="steps">
+                    <option value="4">4 (Fast)</option>
+                    <option value="9" selected>9 (Balanced)</option>
+                    <option value="20">20 (Quality)</option>
+                    <option value="50">50 (Best)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="seed">Seed (optional)</label>
+                <input type="number" id="seed" placeholder="Leave empty for random">
+            </div>
+        </div>
+        <button type="submit" id="submit-btn">Generate Image</button>
+        <div id="queue-warning" class="queue-full" style="display: none;">Queue is full, please try again later</div>
+    </form>
+
+    <div id="result" class="result" style="display: none;">
+        <div id="status" class="status"></div>
+        <div id="image-container"></div>
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        let pollInterval = null;
+
+        async function checkHealth() {
+            try {
+                const res = await fetch('/health');
+                const data = await res.json();
+                document.getElementById('queue-size').textContent = data.queue_size;
+                document.getElementById('model-status').textContent = data.model_loaded ? 'Loaded' : 'Not Loaded';
+            } catch (e) {
+                console.error('Health check failed:', e);
+            }
+        }
+
+        async function pollStatus(taskId) {
+            try {
+                const res = await fetch(`/status/${taskId}`);
+                const data = await res.json();
+
+                const statusEl = document.getElementById('status');
+                statusEl.className = 'status ' + data.status;
+                statusEl.textContent = `Status: ${data.status}${data.progress ? ' (' + data.progress + '%)' : ''}`;
+
+                if (data.status === 'completed' && data.image_path) {
+                    clearInterval(pollInterval);
+                    document.getElementById('image-container').innerHTML = `<img src="/image/${taskId}" alt="Generated image">`;
+                    document.getElementById('submit-btn').disabled = false;
+                } else if (data.status === 'failed') {
+                    clearInterval(pollInterval);
+                    document.getElementById('error').style.display = 'block';
+                    document.getElementById('error').textContent = 'Error: ' + (data.error || 'Unknown error');
+                    document.getElementById('submit-btn').disabled = false;
+                }
+            } catch (e) {
+                console.error('Poll failed:', e);
+            }
+        }
+
+        document.getElementById('generate-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const resultEl = document.getElementById('result');
+            resultEl.style.display = 'block';
+            document.getElementById('status').className = 'status pending';
+            document.getElementById('status').textContent = 'Status: Submitting...';
+            document.getElementById('image-container').innerHTML = '';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('queue-warning').style.display = 'none';
+            document.getElementById('submit-btn').disabled = true;
+
+            const body = {
+                prompt: document.getElementById('prompt').value,
+                height: parseInt(document.getElementById('height').value),
+                width: parseInt(document.getElementById('width').value),
+                num_inference_steps: parseInt(document.getElementById('steps').value),
+            };
+
+            const seed = document.getElementById('seed').value;
+            if (seed) body.seed = parseInt(seed);
+
+            try {
+                const res = await fetch('/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    if (res.status === 503) {
+                        document.getElementById('queue-warning').style.display = 'block';
+                    }
+                    throw new Error(data.detail || 'Request failed');
+                }
+
+                document.getElementById('status').textContent = 'Status: Queued';
+
+                pollInterval = setInterval(() => pollStatus(data.task_id), 1000);
+            } catch (e) {
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = e.message;
+                document.getElementById('submit-btn').disabled = false;
+            }
+        };
+
+        checkHealth();
+        setInterval(checkHealth, 10000);
+    </script>
+</body>
+</html>
